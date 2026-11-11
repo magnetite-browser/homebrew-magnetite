@@ -1,0 +1,108 @@
+name: Update cask
+run-name: Cask for Magnetite ${{ inputs.version || '(latest release)' }}
+
+# Takes the cask of a published Magnetite release into this tap: downloads
+# the release's magnetite.rb, checks it against the release's checksums,
+# installs it once on a Mac the way a user would, and commits it as
+# Casks/magnetite.rb. Run it after publishing a release (Actions → Update
+# cask → Run workflow). It refuses drafts and pre-releases, and an app
+# Gatekeeper would not open.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version without the "v" (0.2.0); empty for the latest release
+        default: ""
+
+permissions: {}
+
+concurrency:
+  group: update-cask
+  cancel-in-progress: false
+
+env:
+  BROWSER_REPO: magnetite-browser/magnetite
+  CASK: magnetite-browser/magnetite/magnetite
+
+jobs:
+  update:
+    name: Check and commit
+    runs-on: macos-15
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Find the release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WANTED: ${{ inputs.version }}
+        run: |
+          if [[ -n "$WANTED" ]]; then
+            [[ "$WANTED" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::Not a version (0.2.0): $WANTED"; exit 1; }
+            tag="v$WANTED"
+          else
+            # "Latest" on GitHub is never a draft or a pre-release.
+            tag="$(gh release view --repo "$BROWSER_REPO" --json tagName --jq .tagName)"
+          fi
+          state="$(gh release view "$tag" --repo "$BROWSER_REPO" --json isDraft,isPrerelease --jq '"\(.isDraft) \(.isPrerelease)"')"
+          [[ "$state" == "false false" ]] || { echo "::error::$tag is a draft or a pre-release; the tap carries published releases only"; exit 1; }
+          echo "tag=$tag" >>"$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >>"$GITHUB_OUTPUT"
+
+      - name: Download the cask and the checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          gh release download "$TAG" --repo "$BROWSER_REPO" --dir "$RUNNER_TEMP/release" \
+            --pattern magnetite.rb --pattern SHA256SUMS
+
+      # The cask must name this version and the checksums the release lists
+      # for its two macOS packages; anything else is not this release's cask.
+      - name: Check the cask against the release
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          cask="$RUNNER_TEMP/release/magnetite.rb" sums="$RUNNER_TEMP/release/SHA256SUMS"
+          grep -qx "  version \"$VERSION\"" "$cask" || { echo "::error::The cask is not for $VERSION"; exit 1; }
+          for arch in aarch64 x86_64; do
+            want="$(awk -v f="Magnetite-$VERSION-macos-$arch.zip" '$2 == f || $2 == "*" f { print $1 }' "$sums")"
+            [[ -n "$want" ]] || { echo "::error::SHA256SUMS does not list the $arch package"; exit 1; }
+            grep -q "sha256 \"$want\"" "$cask" || { echo "::error::The cask's $arch checksum is not the release's"; exit 1; }
+          done
+          mkdir -p Casks
+          cp "$cask" Casks/magnetite.rb
+
+      # Homebrew reads casks from taps only: this checkout becomes the tap.
+      - name: Style, audit and a real install
+        run: |
+          taps="$(brew --repository)/Library/Taps/magnetite-browser"
+          mkdir -p "$taps"
+          ln -s "$GITHUB_WORKSPACE" "$taps/homebrew-magnetite"
+          brew style "$CASK"
+          brew audit --cask --online "$CASK"
+          brew install --cask "$CASK"
+          # What a user gets after the download: Gatekeeper has to accept it.
+          spctl -a -vv /Applications/Magnetite.app
+          brew uninstall --cask "$CASK"
+
+      - name: Commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          if git diff --quiet -- Casks/magnetite.rb && git ls-files --error-unmatch Casks/magnetite.rb >/dev/null 2>&1; then
+            echo "The tap has this cask already."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/magnetite.rb
+          git commit -m "magnetite $VERSION"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:main

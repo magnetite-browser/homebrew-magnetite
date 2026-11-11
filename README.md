@@ -20,11 +20,13 @@ brew uninstall --zap --cask magnetite
 
 ## How the cask gets here
 
-`Casks/magnetite.rb` is written by the browser's release workflow for each
-release, with the checksums of that release's packages, and committed here
-once the release is published
-([how](https://github.com/magnetite-browser/magnetite/blob/main/docs/development/release.md#homebrew)).
-Only notarized releases get a cask.
+The browser's release workflow writes `magnetite.rb` for each release, with
+the checksums of that release's packages. After a release is published, the
+workflow "Update cask" in this repository downloads it, checks it against
+the release's checksums, installs it once on a Mac as a user would, and
+commits it as `Casks/magnetite.rb`
+([the steps](https://github.com/magnetite-browser/magnetite/blob/main/docs/development/release.md#homebrew)).
+Only notarized releases pass, and drafts and pre-releases are refused.
 
 Problems with the cask or the app belong in the
 [browser's issues](https://github.com/magnetite-browser/magnetite/issues).
