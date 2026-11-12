@@ -85,6 +85,9 @@ jobs:
           taps="$(brew --repository)/Library/Taps/magnetite-browser"
           mkdir -p "$taps"
           ln -s "$GITHUB_WORKSPACE" "$taps/homebrew-magnetite"
+          # Homebrew loads a cask from a tap of its own only once it is
+          # trusted; a user's "brew install" of the full name does that itself.
+          brew trust --cask "$CASK"
           brew style "$CASK"
           brew audit --cask --online "$CASK"
           brew install --cask "$CASK"
