@@ -8,9 +8,6 @@ The Homebrew tap of the [Magnetite](https://magnetitebrowser.org) browser.
 brew install --cask magnetite-browser/magnetite/magnetite
 ```
 
-The cask arrives with Magnetite's first release; until then this command
-finds nothing.
-
 Magnetite updates itself, so `brew upgrade` leaves it alone. To remove it
 with its data:
 
