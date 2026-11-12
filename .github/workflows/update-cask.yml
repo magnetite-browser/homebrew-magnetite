@@ -81,6 +81,8 @@ jobs:
 
       # Homebrew reads casks from taps only: this checkout becomes the tap.
       - name: Style, audit and a real install
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           taps="$(brew --repository)/Library/Taps/magnetite-browser"
           mkdir -p "$taps"
@@ -89,7 +91,9 @@ jobs:
           # trusted; a user's "brew install" of the full name does that itself.
           brew trust --cask "$CASK"
           brew style "$CASK"
-          brew audit --cask --online "$CASK"
+          # The audit asks GitHub's API about the release; without a token
+          # it shares the runner address's small allowance and often has none.
+          HOMEBREW_GITHUB_API_TOKEN="$GH_TOKEN" brew audit --cask --online "$CASK"
           brew install --cask "$CASK"
           # What a user gets after the download: Gatekeeper has to accept it.
           spctl -a -vv /Applications/Magnetite.app
