@@ -1,15 +1,15 @@
 # Homebrew cask for the tap magnetite-browser/homebrew-magnetite (Casks/magnetite.rb).
 # scripts/release/render-cask.sh fills in the @…@ values for each release.
 cask "magnetite" do
-  version "0.0.14"
+  version "0.0.15"
 
   on_arm do
-    sha256 "9bb7d1d828bca9b11d6d0e8aab719714d66282fcd252120c006202b5478f2077"
+    sha256 "192078d8cdfc854b18790f8bd28a91fd77cc085f53a9e01ff386f557ecf3c3ee"
 
     url "https://github.com/magnetite-browser/magnetite/releases/download/v#{version}/Magnetite-#{version}-macos-aarch64.zip"
   end
   on_intel do
-    sha256 "279e44733f99a0021edfc3dc28ebc8339fdd96b701192167ee444a6663bc6743"
+    sha256 "6bb72e885c034f3c4a8e0b00f5d659370fa7e5f976744a408b9c3cb723340da4"
 
     url "https://github.com/magnetite-browser/magnetite/releases/download/v#{version}/Magnetite-#{version}-macos-x86_64.zip"
   end
