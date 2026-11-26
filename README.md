@@ -9,7 +9,7 @@ brew install --cask magnetite-browser/magnetite/magnetite
 ```
 
 On macOS this installs `Magnetite.app`. On Linux (x86_64, aarch64; Homebrew
-5.1.12 or later) it installs the AppImage as
+7.0.12 or later) it installs the AppImage as
 `~/Applications/Magnetite.AppImage`, with an entry in your app launcher.
 
 Magnetite updates itself, so `brew upgrade` leaves it alone. To remove it
