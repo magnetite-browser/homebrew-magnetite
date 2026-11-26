@@ -64,7 +64,8 @@ jobs:
           # The audit asks GitHub's API about the release; without a token
           # it shares the runner address's small allowance and often has none.
           HOMEBREW_GITHUB_API_TOKEN="$GH_TOKEN" brew audit --cask --online "$CASK"
-          brew install --cask "$CASK"
+          brew config
+          brew install --cask --debug --verbose "$CASK"
 
       # What a user gets after the download: Gatekeeper has to accept it.
       - name: Gatekeeper accepts the app
