@@ -1,0 +1,89 @@
+name: Install
+
+# Installs Casks/magnetite.rb once on a Mac and once on Linux the way a user
+# would, after brew style and brew audit, and uninstalls it again. Runs on
+# pull requests that change the cask, and for "Update cask" on the cask it
+# took from a release (passed as the workflow artifact `artifact`).
+
+on:
+  pull_request:
+    paths:
+      - Casks/**
+      - .github/workflows/install.yml
+  workflow_call:
+    inputs:
+      artifact:
+        description: Name of the workflow artifact holding magnetite.rb; empty for the checkout's own
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+env:
+  CASK: magnetite-browser/magnetite/magnetite
+
+jobs:
+  install:
+    name: ${{ matrix.system }}
+    strategy:
+      matrix:
+        include:
+          - { system: macOS, os: macos-15 }
+          - { system: Linux, os: ubuntu-24.04 }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - if: inputs.artifact != ''
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ inputs.artifact }}
+          path: Casks
+
+      # GitHub's Linux runners carry Homebrew, but not on the PATH.
+      - name: Homebrew on the PATH
+        if: runner.os == 'Linux'
+        run: echo /home/linuxbrew/.linuxbrew/bin >>"$GITHUB_PATH"
+
+      # Homebrew reads casks from taps only: this checkout becomes the tap.
+      - name: Style, audit and a real install
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          taps="$(brew --repository)/Library/Taps/magnetite-browser"
+          mkdir -p "$taps"
+          ln -s "$GITHUB_WORKSPACE" "$taps/homebrew-magnetite"
+          # Homebrew loads a cask from a tap of its own only once it is
+          # trusted; a user's "brew install" of the full name does that itself.
+          brew trust --cask "$CASK"
+          brew style "$CASK"
+          # The audit asks GitHub's API about the release; without a token
+          # it shares the runner address's small allowance and often has none.
+          HOMEBREW_GITHUB_API_TOKEN="$GH_TOKEN" brew audit --cask --online "$CASK"
+          brew install --cask "$CASK"
+
+      # What a user gets after the download: Gatekeeper has to accept it.
+      - name: Gatekeeper accepts the app
+        if: runner.os == 'macOS'
+        run: spctl -a -vv /Applications/Magnetite.app
+
+      # The AppImage where Magnetite's own update expects it, and a launcher
+      # entry that starts it and finds its icon.
+      - name: The AppImage and its launcher entry
+        if: runner.os == 'Linux'
+        run: |
+          image="$HOME/Applications/Magnetite.AppImage"
+          entry="$HOME/.local/share/applications/magnetite.desktop"
+          [[ -x "$image" ]] || { echo "::error::$image is missing or not executable"; exit 1; }
+          "$image" --appimage-version
+          cat "$entry"
+          grep -q "^Exec=.*$image" "$entry" || { echo "::error::The launcher entry does not start $image"; exit 1; }
+          icon="$(sed -n 's/^Icon=//p' "$entry")"
+          [[ -f "$icon" ]] || { echo "::error::The launcher entry's icon $icon is missing"; exit 1; }
+
+      - name: Uninstall
+        run: brew uninstall --cask "$CASK"

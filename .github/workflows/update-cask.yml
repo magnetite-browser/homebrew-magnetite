@@ -3,10 +3,10 @@ run-name: Cask for Magnetite ${{ inputs.version || '(latest release)' }}
 
 # Takes the cask of a published Magnetite release into this tap: downloads
 # the release's magnetite.rb, checks it against the release's checksums,
-# installs it once on a Mac the way a user would, and commits it as
-# Casks/magnetite.rb. Run it after publishing a release (Actions → Update
-# cask → Run workflow). It refuses drafts and pre-releases, and an app
-# Gatekeeper would not open.
+# installs it once on a Mac and once on Linux the way a user would
+# (install.yml), and commits it as Casks/magnetite.rb. Run it after
+# publishing a release (Actions → Update cask → Run workflow). It refuses
+# drafts and pre-releases, and an app Gatekeeper would not open.
 
 on:
   workflow_dispatch:
@@ -26,17 +26,15 @@ env:
   CASK: magnetite-browser/magnetite/magnetite
 
 jobs:
-  update:
-    name: Check and commit
-    runs-on: macos-15
-    timeout-minutes: 30
+  check:
+    name: Check against the release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
-      contents: write
+      contents: read
+    outputs:
+      version: ${{ steps.release.outputs.version }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
       - name: Find the release
         id: release
         env:
@@ -64,45 +62,62 @@ jobs:
             --pattern magnetite.rb --pattern SHA256SUMS
 
       # The cask must name this version and the checksums the release lists
-      # for its two macOS packages; anything else is not this release's cask.
+      # for its macOS zips and Linux AppImages; anything else is not this
+      # release's cask.
       - name: Check the cask against the release
         env:
           VERSION: ${{ steps.release.outputs.version }}
         run: |
           cask="$RUNNER_TEMP/release/magnetite.rb" sums="$RUNNER_TEMP/release/SHA256SUMS"
           grep -qx "  version \"$VERSION\"" "$cask" || { echo "::error::The cask is not for $VERSION"; exit 1; }
-          for arch in aarch64 x86_64; do
-            want="$(awk -v f="Magnetite-$VERSION-macos-$arch.zip" '$2 == f || $2 == "*" f { print $1 }' "$sums")"
-            [[ -n "$want" ]] || { echo "::error::SHA256SUMS does not list the $arch package"; exit 1; }
-            grep -q "sha256 \"$want\"" "$cask" || { echo "::error::The cask's $arch checksum is not the release's"; exit 1; }
+          # The cask's sha256 key for each package.
+          for pair in \
+            "arm Magnetite-$VERSION-macos-aarch64.zip" \
+            "intel Magnetite-$VERSION-macos-x86_64.zip" \
+            "arm64_linux magnetite-$VERSION-linux-aarch64.AppImage" \
+            "x86_64_linux magnetite-$VERSION-linux-x86_64.AppImage"; do
+            read -r key file <<<"$pair"
+            want="$(awk -v f="$file" '$2 == f || $2 == "*" f { print $1 }' "$sums")"
+            [[ -n "$want" ]] || { echo "::error::SHA256SUMS does not list $file"; exit 1; }
+            grep -Eq "(^|[[:space:]])$key:[[:space:]]+\"$want\"" "$cask" || { echo "::error::The cask's checksum for $file is not the release's"; exit 1; }
           done
-          mkdir -p Casks
-          cp "$cask" Casks/magnetite.rb
 
-      # Homebrew reads casks from taps only: this checkout becomes the tap.
-      - name: Style, audit and a real install
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          taps="$(brew --repository)/Library/Taps/magnetite-browser"
-          mkdir -p "$taps"
-          ln -s "$GITHUB_WORKSPACE" "$taps/homebrew-magnetite"
-          # Homebrew loads a cask from a tap of its own only once it is
-          # trusted; a user's "brew install" of the full name does that itself.
-          brew trust --cask "$CASK"
-          brew style "$CASK"
-          # The audit asks GitHub's API about the release; without a token
-          # it shares the runner address's small allowance and often has none.
-          HOMEBREW_GITHUB_API_TOKEN="$GH_TOKEN" brew audit --cask --online "$CASK"
-          brew install --cask "$CASK"
-          # What a user gets after the download: Gatekeeper has to accept it.
-          spctl -a -vv /Applications/Magnetite.app
-          brew uninstall --cask "$CASK"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: cask
+          path: ${{ runner.temp }}/release/magnetite.rb
+          if-no-files-found: error
+
+  install:
+    name: Install
+    needs: check
+    permissions:
+      contents: read
+    uses: ./.github/workflows/install.yml
+    with:
+      artifact: cask
+
+  commit:
+    name: Commit
+    needs: [check, install]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: cask
+          path: Casks
 
       - name: Commit
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.release.outputs.version }}
+          VERSION: ${{ needs.check.outputs.version }}
         run: |
           if git diff --quiet -- Casks/magnetite.rb && git ls-files --error-unmatch Casks/magnetite.rb >/dev/null 2>&1; then
             echo "The tap has this cask already."
