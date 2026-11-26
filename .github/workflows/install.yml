@@ -49,6 +49,14 @@ jobs:
         if: runner.os == 'Linux'
         run: echo /home/linuxbrew/.linuxbrew/bin >>"$GITHUB_PATH"
 
+      # The runner images carry a Homebrew that may be weeks old and does not
+      # update itself there; users get the current release (7.0.14 stopped
+      # this install with "Broken pipe": Homebrew issue 24651, fixed in
+      # 7.0.15). Before brew style, which turns on developer mode and with it
+      # updates to unreleased code.
+      - name: Current Homebrew
+        run: brew update
+
       # Homebrew reads casks from taps only: this checkout becomes the tap.
       - name: Style, audit and a real install
         env:
@@ -64,8 +72,7 @@ jobs:
           # The audit asks GitHub's API about the release; without a token
           # it shares the runner address's small allowance and often has none.
           HOMEBREW_GITHUB_API_TOKEN="$GH_TOKEN" brew audit --cask --online "$CASK"
-          brew config
-          brew install --cask --debug --verbose "$CASK"
+          brew install --cask "$CASK"
 
       # What a user gets after the download: Gatekeeper has to accept it.
       - name: Gatekeeper accepts the app
