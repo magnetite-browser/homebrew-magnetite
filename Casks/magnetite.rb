@@ -3,11 +3,11 @@
 cask "magnetite" do
   arch arm: "aarch64", intel: "x86_64"
 
-  version "0.0.19"
-  sha256 arm:          "08bf4596c573e23c6433bd7317b7c317adf34e2586350d340c7ccec4027e2cf2",
-         intel:        "241c768036798fb0793aeae2855ae3bc9b370e201e1db27f18789195414b4308",
-         arm64_linux:  "10fb9c4cbda5c076108489d0be85d504649521045b085b66e83e70e5938a7fe0",
-         x86_64_linux: "5d2e1b3b1ca25235c7f9a0048856e0740542591aacadb1587ce521d16b118f9a"
+  version "0.0.20"
+  sha256 arm:          "6ec3fe5ffde62b3c13fab36d336e077dcbc64648caa46c1a6c911c0c70af30c1",
+         intel:        "7d8f8527a9f371977a27080b09c8df2d61d7e985c3705771a31406c41fe5cd54",
+         arm64_linux:  "d7fddd0f5da1eb899c303c59844fff4d4872d67567628d04c76fd2a5d1e748bd",
+         x86_64_linux: "e2cd2221fc3476b199080baec5ed291ec1ffc433b30a9ff9179341e0b2e7a163"
 
   on_macos do
     url "https://github.com/magnetite-browser/magnetite/releases/download/v#{version}/Magnetite-#{version}-macos-#{arch}.zip"
